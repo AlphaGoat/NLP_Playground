@@ -117,8 +117,53 @@ def grab_object_nssdc_info_from_url(url):
         raise Exception
     soup = BeautifulSoup(rs.content, 'html.parser')
     print(soup.prettify())
+    stuff = soup.find_all('p')
     object_summary = soup.find_all('p')[0]
-    print(object_summary.get_text())
+    for stufferino in stuff:
+        print(stufferino.get_text())
+
+
+def astriagraph_scraper(obj_name, data_source='All',  
+        nat_of_origin='All', orbit_regime='All'):
+    '''Scrapes information of space object from University of 
+       Texas, Austin's AstriaGraph.
+
+       http://astria.tacc.utexas.edu/AstriaGraph/
+
+       Parameters:
+           obj_name (str) -- name of object
+           data_source (str) -- source for information on object
+                            possible data sources:
+                                'Astria OD/LeoLabs data'
+                                'Astria OD/Starbrook data'
+                                'JSC Vimpel'
+                                'LeoLabs'
+                                'Planet'
+                                'SeeSat-L'
+                                'USSTRATCOM'
+            nat_of_origin (str) -- country of origin for the object
+            orbit_regime (str) -- orbit regime for object
+                            possible orbit regimes:
+                                'Low Earth orbit (LEO)'
+                                'Medium Earth orbit (MEO)'
+                                'Geo-synchronous/stationary orbit (GSO/GEO)'
+                                'High Earth Orbit (HEO)'
+    '''
+    astriagraph_url = "http://astria.tacc.utexas.edu/AstriaGraph/"
+    #with requests.Session() as rs:
+    package = {"SearchBox" : obj_name,
+               "DataSrcSelect" : data_source,
+               "OriginSelect" : nat_of_origin,
+               "RegimeSelect" : orbit_regime
+               }
+
+    rp = requests.post(astriagraph_url, data=package)
+    if rp.status_code != requests.codes.ok:
+        print("\nERROR: response not recieved from NASA NSSDC query engine")
+        print("\nCheck: {}".format(nssdc_query_url))
+        raise Exception
+
+
 
 def save_object_info_to_corpus(object_info, *args, **kwargs):
     '''Save scraped object info into text corpus'''
