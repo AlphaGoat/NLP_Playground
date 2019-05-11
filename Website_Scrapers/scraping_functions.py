@@ -163,6 +163,23 @@ def astriagraph_scraper(obj_name, data_source='All',
         print("\nCheck: {}".format(nssdc_query_url))
         raise Exception
 
+    # Sort out html mumbo jumbo
+    soup = BeautifulSoup(rp.content, 'html.parser')
+    print(soup.prettify())
+
+def google_search_scraper(search_term, output='xml_no_dtd', 
+        cx='placeholder', *args, **kwargs):
+    '''Performs a query with google and returns results. Further 
+       scraping operations can be performed if desired
+
+       Parameters:
+           args (str): additional terms that will be used in query
+           kwargs (str): google api parameters
+    '''
+    google_query_url = "http://www.google.com/search?"
+    client = 'google-csbe'
+    query_str = ''
+    for arg in args: query_str + str(arg)
 
 
 def save_object_info_to_corpus(object_info, *args, **kwargs):
@@ -173,5 +190,6 @@ def save_object_info_to_corpus(object_info, *args, **kwargs):
 
 
 if __name__ == '__main__':
-    nasa_nssdc_scraper('Galaxy')
+    #nasa_nssdc_scraper('Galaxy')
+    astriagraph_scraper('Galaxy')
 
