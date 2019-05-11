@@ -111,12 +111,43 @@ def nasa_nssdc_scraper(obj_name, discipline='Any Discipline', launch_date=None):
 
 def grab_object_nssdc_info_from_url(url):
     '''Grab text from nssdc object page to incorporate into corpus'''
+    # NOTE: this function relies on the specific html format imposed by the
+    #       NSSDC website (as of May 10, 2019). As such, this function could
+    #       easily break if the format is changed, or if the format is not
+    #       generalizable to every object type
+    # TODO: read up some more on website scraping and come up with a more
+    #       general method to gather the information you need from the
+    #       website that will have less risk of breaking in the event of
+    #       a website format change
     rs = requests.get(url)
     if rs.status_code != requests.codes.ok:
         print("\nERROR: no response from {}".format(url))
         raise Exception
     soup = BeautifulSoup(rs.content, 'html.parser')
     print(soup.prettify())
+    body = soup.find('body')
+    print(body.prettify())
+
+    # Initialize an object dictionary to contain all relevant nssdc information
+    # provided about said object
+    nssdc_obj_dict = dict()
+
+    # Grab the object description and place in object dictionary
+    obj_desc_section = body.find('div', class_='urone')#.find('p').find('p')
+    obj_desc = obj_desc_section.find('p').find('p').get_text()
+    nssdc_obj_dict['description'] = obj_desc
+
+    # Fetch all object psuedonyms provided by the website
+    brief_facts_section = body.find('div', class_='urtwo')
+    obj_psuedonyms = list()
+    for psuedonym in obj_psuedonyms_section.find('ul').find_all('li'):
+        obj_psuedonyms.append(psuedonym.get_text())
+
+    obj_facts_section = brief_facts_section.find('p')
+    for fact in obj_facts_section.find_all('strong'):
+        
+
+    print(obj_desc)
     stuff = soup.find_all('p')
     object_summary = soup.find_all('p')[0]
     for stufferino in stuff:
@@ -159,9 +190,14 @@ def astriagraph_scraper(obj_name, data_source='All',
 
     rp = requests.post(astriagraph_url, data=package)
     if rp.status_code != requests.codes.ok:
-        print("\nERROR: response not recieved from NASA NSSDC query engine")
-        print("\nCheck: {}".format(nssdc_query_url))
+        print("\nERROR: response not recieved from Astriagraph")
+        print("\nCheck: {}".format(astriagraph_url))
         raise Exception
+
+
+def spacetrack_scraper():
+
+    pass
 
 
 
