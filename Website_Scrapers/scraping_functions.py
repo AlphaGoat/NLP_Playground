@@ -1,9 +1,10 @@
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 import pdb
 
-def nasa_nssdc_scraper(obj_name, discipline='Any Discipline', launch_date=None):
+def nasa_nssdc_scraper(obj_name, discipline='Any Discipline',
+        launch_date=None):
     '''Function to scrape all textual data about a given object from the
        NASA National Space Science Data Center Catalog (NSSDC)
 
@@ -124,34 +125,82 @@ def grab_object_nssdc_info_from_url(url):
         print("\nERROR: no response from {}".format(url))
         raise Exception
     soup = BeautifulSoup(rs.content, 'html.parser')
-    print(soup.prettify())
+    #print(soup.prettify())
     body = soup.find('body')
-    print(body.prettify())
+    #print(body.prettify())
 
-    # Initialize an object dictionary to contain all relevant nssdc information
-    # provided about said object
+    # Initialize an object dictionary to contain all relevant nssdc 
+    # information
     nssdc_obj_dict = dict()
 
-    # Grab the object description and place in object dictionary
+    # Grab the object description 
     obj_desc_section = body.find('div', class_='urone')#.find('p').find('p')
     obj_desc = obj_desc_section.find('p').find('p').get_text()
+    #print(obj_desc)
     nssdc_obj_dict['description'] = obj_desc
 
     # Fetch all object psuedonyms provided by the website
     brief_facts_section = body.find('div', class_='urtwo')
     obj_psuedonyms = list()
-    for psuedonym in obj_psuedonyms_section.find('ul').find_all('li'):
+    for psuedonym in brief_facts_section.find('ul').find_all('li'):
+        #print(psuedonym.get_text())
         obj_psuedonyms.append(psuedonym.get_text())
+        
+    nssdc_obj_dict['object psuedonyms'] = obj_psuedonyms
+
+    #print(soup.prettify())
 
     obj_facts_section = brief_facts_section.find('p')
-    for fact in obj_facts_section.find_all('strong'):
-        
+    #for fact in obj_facts_section.find_all('strong'):
+    #    print(fact)
+    #    pass
 
-    print(obj_desc)
-    stuff = soup.find_all('p')
-    object_summary = soup.find_all('p')[0]
-    for stufferino in stuff:
-        print(stufferino.get_text())
+    #i = 0
+
+    # Fetch all miscellaneous facts about the object (launch date, 
+    # launch site, etc.)
+    for nav_text in obj_facts_section.find_all('strong'):
+        #print(type(nav_text))
+        #print("This is iteration {}".format(i))
+        #if isinstance(nav_text, NavigableString):
+        #    print("This is a NavigableString: {}".format(nav_text))
+        #    continue
+        #if isinstance(nav_text, Tag):
+        fact_key = nav_text.get_text()[:-1]
+        fact_value = nav_text.nextSibling
+        nssdc_obj_dict[fact_key] = fact_value
+            #print("This is a tag: {}".format(nav_text))
+            #print("Hopefully navigable text: {}".format(nav_text.nextSibling))
+        #print(nav_text.get_text())
+        #i += 1
+        #print(facterino.get_text())
+
+    for extr_nav_text in obj_facts_section.find_all('h2', {'class':'section-heading'}):
+        pdb.set_trace()
+        print("h2: {}".format(extr_nav_text))
+        extr_fact = extr_nav_text.nextSibling.find('li')
+        print("The fact we want: {}".format(extr_fact))
+
+    #extraneous_facts_section = brief_facts_section.find_all
+
+
+    #print(soup.prettify())
+
+    #for facterino in obj_facts_section.find_all('br'):
+    #    pdb.set_trace()
+    #    next_s = facterino.nextSibling
+    #    if not (next_s and isinstance(next_s, NavigableString)):
+    #        continue
+    #    next2_s = next_s.nextSibling
+    #    if next2_s and isinstance(next2_s, Tag) and next2_s.name == 'br':
+    #        print(next_s.get_text())
+    #        print("Here now")
+
+#    print(obj_desc)
+#    stuff = soup.find_all('p')
+#    object_summary = soup.find_all('p')[0]
+#    for stufferino in stuff:
+#        print(stufferino.get_text())
 
 
 def astriagraph_scraper(obj_name, data_source='All',  
@@ -226,6 +275,6 @@ def save_object_info_to_corpus(object_info, *args, **kwargs):
 
 
 if __name__ == '__main__':
-    #nasa_nssdc_scraper('Galaxy')
-    astriagraph_scraper('Galaxy')
+    nasa_nssdc_scraper('Galaxy')
+    #astriagraph_scraper('Galaxy')
 
