@@ -1,7 +1,11 @@
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
 
+import re
+import json
+
 import pdb
+
 
 def nasa_nssdc_scraper(obj_name, discipline='Any Discipline',
         launch_date=None):
@@ -125,9 +129,7 @@ def grab_object_nssdc_info_from_url(url):
         print("\nERROR: no response from {}".format(url))
         raise Exception
     soup = BeautifulSoup(rs.content, 'html.parser')
-    #print(soup.prettify())
     body = soup.find('body')
-    #print(body.prettify())
 
     # Initialize an object dictionary to contain all relevant nssdc 
     # information
@@ -136,71 +138,40 @@ def grab_object_nssdc_info_from_url(url):
     # Grab the object description 
     obj_desc_section = body.find('div', class_='urone')#.find('p').find('p')
     obj_desc = obj_desc_section.find('p').find('p').get_text()
-    #print(obj_desc)
     nssdc_obj_dict['description'] = obj_desc
 
     # Fetch all object psuedonyms provided by the website
     brief_facts_section = body.find('div', class_='urtwo')
     obj_psuedonyms = list()
     for psuedonym in brief_facts_section.find('ul').find_all('li'):
-        #print(psuedonym.get_text())
         obj_psuedonyms.append(psuedonym.get_text())
         
     nssdc_obj_dict['object psuedonyms'] = obj_psuedonyms
 
-    #print(soup.prettify())
-
     obj_facts_section = brief_facts_section.find('p')
-    #for fact in obj_facts_section.find_all('strong'):
-    #    print(fact)
-    #    pass
-
-    #i = 0
 
     # Fetch all miscellaneous facts about the object (launch date, 
     # launch site, etc.)
-    for nav_text in obj_facts_section.find_all('strong'):
-        #print(type(nav_text))
-        #print("This is iteration {}".format(i))
-        #if isinstance(nav_text, NavigableString):
-        #    print("This is a NavigableString: {}".format(nav_text))
-        #    continue
-        #if isinstance(nav_text, Tag):
+    for nav_text in brief_facts_section.find_all('strong'):
         fact_key = nav_text.get_text()[:-1]
-        fact_value = nav_text.nextSibling
+        fact_value = nav_text.nextSibling.get_text()[1:]
         nssdc_obj_dict[fact_key] = fact_value
-            #print("This is a tag: {}".format(nav_text))
-            #print("Hopefully navigable text: {}".format(nav_text.nextSibling))
-        #print(nav_text.get_text())
-        #i += 1
-        #print(facterino.get_text())
 
-    for extr_nav_text in obj_facts_section.find_all('h2', {'class':'section-heading'}):
-        pdb.set_trace()
-        print("h2: {}".format(extr_nav_text))
-        extr_fact = extr_nav_text.nextSibling.find('li')
-        print("The fact we want: {}".format(extr_fact))
+    # Get information about the funding agency for the object
+    fund_agency_section = brief_facts_section.find('h2',
+                                text=re.compile('Funding Agency'))
+    fund_agency = fund_agency_section.nextSibling.get_text()
+    nssdc_obj_dict['Funding Agency'] = fund_agency
 
-    #extraneous_facts_section = brief_facts_section.find_all
+    # Get information about function/role of satellite
+    discipline_section = brief_facts_section.find('h2',
+                                text=re.compile('Discipline'))
+    discipline = discipline_section.nextSibling.get_text()
+    nssdc_obj_dict['Discipline'] = discipline
+
+    return nssdc_obj_dict
 
 
-    #print(soup.prettify())
-
-    #for facterino in obj_facts_section.find_all('br'):
-    #    pdb.set_trace()
-    #    next_s = facterino.nextSibling
-    #    if not (next_s and isinstance(next_s, NavigableString)):
-    #        continue
-    #    next2_s = next_s.nextSibling
-    #    if next2_s and isinstance(next2_s, Tag) and next2_s.name == 'br':
-    #        print(next_s.get_text())
-    #        print("Here now")
-
-#    print(obj_desc)
-#    stuff = soup.find_all('p')
-#    object_summary = soup.find_all('p')[0]
-#    for stufferino in stuff:
-#        print(stufferino.get_text())
 
 
 def astriagraph_scraper(obj_name, data_source='All',  
@@ -239,7 +210,7 @@ def astriagraph_scraper(obj_name, data_source='All',
 
     rp = requests.post(astriagraph_url, data=package)
     if rp.status_code != requests.codes.ok:
-        print("\nERROR: response not recieved from Astriagraph")
+        print("\nERROR: response not recieved from Astriagraph Server")
         print("\nCheck: {}".format(astriagraph_url))
         raise Exception
 
@@ -247,9 +218,10 @@ def astriagraph_scraper(obj_name, data_source='All',
     soup = BeautifulSoup(rp.content, 'html.parser')
     print(soup.prettify())
 
-def google_search_scraper(search_term, output='xml_no_dtd', 
-        cx='placeholder', *args, **kwargs):
-    '''Performs a query with google and returns results. Further 
+
+def google_search_scraper(search_term, cs, output='xml_no_dtd',
+                *args, **kwargs):
+    '''Performs a query with google and returns results. Further
        scraping operations can be performed if desired
 
        Parameters:
@@ -267,12 +239,23 @@ def spacetrack_scraper():
 
 
 
-def save_object_info_to_corpus(object_info, *args, **kwargs):
+def save_object_info_to_corpus(OID, obj_info_dict, info_source,
+                            *args, **kwargs):
     '''Save scraped object info into text corpus'''
     # TODO: define a dictionary format for textual corpus data
+
+    with open('object_corpus.txt', 'w') as ocj:
+        data = json.load(ocj)
+        data[OID][info_source] = obj_info_dict
+        json.dump(data, ocj)
+
+
+def search_oid_by_obj_psuedonym(obj_psuedo):
+    '''Searches for satellite catalog number for given object
+       psuedonym
+    '''
+    with open(
     pass
-
-
 
 if __name__ == '__main__':
     nasa_nssdc_scraper('Galaxy')
