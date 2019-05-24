@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
-
+from lxml import html
 import re
 import json
 
@@ -233,9 +233,93 @@ def google_search_scraper(search_term, cs, output='xml_no_dtd',
     query_str = ''
     for arg in args: query_str + str(arg)
 
-def spacetrack_scraper():
 
-    pass
+def spacetrack_scraper(identity, password, obj_name):
+    '''
+    Scrapes space-track for any relevant information about the input object
+    :param identity (str): username for space-track account
+    :param password (str): password for space-track account
+    :param obj_name (str): name of the object to be searched for
+    :return:
+    '''
+
+    login_info = {
+        "identity": "<USER NAME>",
+        "password": "<PASSWORD>",
+        "spacetrack_csrf_token": "<CSRF_VALUE>"
+    }
+
+    sess_req = requests.session()
+    login_url = "https://www.space-track.org/auth/login"
+
+    try:
+        login_result = sess_req.get(login_url)
+
+    except requests.exceptions.ConnectionError as e:
+        print(e)
+        return
+
+    tree = html.fromstring(login_result.text)
+    authenticity_token = list(set(tree.xpath("//input[@name='spacetrack_csrf_token/@value")))[0]
+
+    login_info["spacetrack_csrf_token"] = authenticity_token
+    login_url["password"] = password
+    login_url["identity"] = identity
+
+    result = session_requests.post(
+        login_url,
+        data=login_info,
+        headers=dict(referer=login_url)
+    )
+
+    query_url = "https://www.space-track.org/#queryBuilder"
+
+    query_params = {
+        'classSel': 'basicspacedata_tle_latest',
+        'orderbySel': 'NORAD_CAT_ID',
+        'sortSel': 'Ascending',
+        'limitIn': '1000',
+        'predicateSel0': 'EPOCH',
+        'operatorSel0': 'greaterThn',
+        'valueIn0': 'now-30',
+        'predicateSel1': 'MEAN_MOTION',
+        'operatorSel1': 'equal',
+        'valueIn1': '0.99-1.01',
+        'predicateSel2': 'ECCENTRICITY',
+        'operatorSel2': 'lessThan',
+        'valueIn2': '0.01'
+    }
+
+    query_result = sessions_requests.get(query_url, params=query_params)
+    print(query_result.ok)
+    print(query_result.status_code)
+    print(query_result.text)
+    tleTree = html.fromstring(query_result.text)
+
+    recent_tles_url = "https://www.space-track.org/#recent"
+
+    geo_tle_url = """
+        https://www.space-track.org/basicspace/data/query/class/tle_latest/
+        ORDINAL/1/EPOCH/%3Enow-30/MEAN_MOTION/0.99-1.01/ECCENTRICITY/%3C0.01/
+        OBJECT_TYPE/payload/orderby/NORAD_CAT_ID/format/tle
+        """
+
+    session_requests.headers.update
+
+    try:
+        tle_pull_result = session_requests.get(
+            geo_tle_url,
+            headers={'referer':"https://www.space-track.org"}
+        )
+    except Exception as e:
+        print("<p>Error: %s</p>" % e)
+
+    print(tle_pull_result.ok)
+    print(tle_pull_result.status_code)
+    print(tle_pull_result.text)
+    tle_tree = html.fromstring(tle_pull_result.content)
+
+    return
 
 
 
@@ -245,17 +329,21 @@ def save_object_info_to_corpus(OID, obj_info_dict, info_source,
     # TODO: define a dictionary format for textual corpus data
 
     with open('object_corpus.txt', 'w') as ocj:
-        data = json.load(ocj)
-        data[OID][info_source] = obj_info_dict
-        json.dump(data, ocj)
+        obj_data = json.load(ocj)
+        obj_data[OID][info_source] = obj_info_dict
+        json.dump(obj_data, ocj)
 
 
 def search_oid_by_obj_psuedonym(obj_psuedo):
     '''Searches for satellite catalog number for given object
        psuedonym
     '''
-    with open(
-    pass
+    with open('object_psuedonyms.txt', 'r') as opj:
+        psuedo_data = json.load(opj)
+        for OID, psuedo_list in data.items():
+            for psuedonym in psuedo_list:
+                if psuedonym == obj_psuedo:
+                    return OID
 
 if __name__ == '__main__':
     nasa_nssdc_scraper('Galaxy')
