@@ -52,7 +52,7 @@ def nasa_nssdc_scraper(obj_name, discipline='Any Discipline',
     if num_obj_return == 0:
         print("\nERROR: Could find no relevant information on object ")
         print("{}".format(obj_name))
-        print("\nTry search again")
+        print("\nTry search again with new search parameter")
         raise Exception
 
     # grab info for all spacecraft returned by query
@@ -85,21 +85,88 @@ def nasa_nssdc_scraper(obj_name, discipline='Any Discipline',
             obj_launch_dates.append(obj_info.get_text())
             # Prepare new entry for dictionary. We have all info we
             # need for a specific object
-            spec_obj_name = obj_names[obj_iter]
-            spec_obj_url = obj_urls_html[obj_iter+1]['href']
-            spec_obj_nssdca_id = obj_nssdca_ids[obj_iter]
-            spec_obj_launch_date = obj_launch_dates[obj_iter]
-            obj_info_dict[spec_obj_name] = [spec_obj_url,
-                                            spec_obj_nssdca_id,
-                                            spec_obj_launch_date]
+            specific_obj_name = obj_names[obj_iter]
+            specific_obj_url = obj_urls_html[obj_iter+1]['href']
+            specific_obj_nssdca_id = obj_nssdca_ids[obj_iter]
+            specfic_obj_launch_date = obj_launch_dates[obj_iter]
+            search_info_dict[specfic_obj_name] = [specific_obj_url,
+                                            specific_obj_nssdca_id,
+                                            specific_obj_launch_date]
             obj_iter += 1
 
-    # List out objects captured by search and ask user what objects they want
-    # to include in the corpus
-    test_name = obj_names[0]
-    obj_info = obj_info_dict[test_name]
-    obj_info_url = base_nssdc_url + obj_info[0]
-    grab_object_nssdc_info_from_url(obj_info_url)
+    # List out objects captured by search and ask user what objects 
+    # they want to include in the corpus
+    print('''\n{0} objects returned from search {1} that correspond with
+          search term {2}\n'''.format(obj_iter, nssdc_query_url, obj_name))
+    print('------------------- RETURNED OBJECTS -------------------')
+
+    # Initialize list to contain all object information dictionaries
+    # returned by the grab_object_nssdc_info_from_url method for all
+    # objects the user wants to retrieve information for
+    list_of_obj_dicts = list()
+    while True:
+        for idx, obj in zip(obj_names, range(obj_iter)):
+            print(\n"{0}) {1}".format(idx, obj_names))
+
+        search_param = input("""\nChoose object by index number
+                    or name, or exit loop by pressing 'q': """)
+
+        if search_param.lower() == 'q':
+            print("\nExiting loop")
+            break
+
+        # If the user input an index:
+        try:
+            search_idx = int(search_param)
+
+            # Check to see if the index is actually in range of the
+            # number of objects
+            try:
+                obj_to_search = obj_names[search_idx]
+            except IndexError:
+                print("\nError: input index out of range")
+                continue
+
+            obj_url = search_info_dict[obj_to_search][0] 
+            obj_info_dict = grab_object_nssdc_info_from_url(obj_url)
+            list_of_obj_dicts.append(obj_info_dict)
+
+        except TypeError:
+            pass
+
+        # If the user input an object name
+        try:
+            obj_url = search_info_dict[search_param][0] 
+            obj_info_dict = grab_object_nssdc_info_from_url(obj_url)
+            list_of_obj_dicts.append(obj_info_dict)
+
+
+        except KeyError:
+            print("""\nError: object name or index not recognized. 
+                Restarting loop""")
+            continue
+
+        # Ask user if they want to grab the info for any other
+        # objects
+        confirm = input("""\nRetrieve information for another
+                object (Y/n)?""")
+
+        if confirm.lower() == 'y' or confirm.lower() == 'yes':
+            continue
+        elif confirm.lower() == 'n' or confirm.lower() =='no':
+            break
+        else:
+            print("\nUnexpected response. Restarting loop")
+            continue
+
+
+    return list_of_obj_dicts
+
+
+    #test_name = obj_names[0]
+    #obj_info = obj_info_dict[test_name]
+    #obj_info_url = base_nssdc_url + obj_info[0]
+    #grab_object_nssdc_info_from_url(obj_info_url)
 
 #    if len(obj_names) == 1:
 #        print("\nInclude object name {} in corpus?".format(obj_names[0]))
