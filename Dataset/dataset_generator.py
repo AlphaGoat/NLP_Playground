@@ -98,3 +98,7 @@ class text_DatasetGenerator(object):
 
             buffer.append(data[data_index])
             data_index = (data_index + 1) % len(data)
+
+        data_index = (data_index + len(data) - span) % len(data)
+
+        return batch, context
