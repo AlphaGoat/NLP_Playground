@@ -105,6 +105,10 @@ class text_DatasetGenerator(object):
             buffer.append(data[data_index])
             data_index = (data_index + 1) % len(data)
 
+        data_index = (data_index + len(data) - span) % len(data)
+
+        return batch, context
+
 
         def embedding(self, valid_size, valid_window, batch_size, embedding_size,
                       skip_window, num_skips):
