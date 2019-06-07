@@ -51,17 +51,29 @@ class Model(object):
 
        link: https://arxiv.org/pdf/1706.03762.pdf
 
+       code partially adapted from tensorflow tutorial
+
+       link: https://www.tensorflow.org/alpha/tutorials/text/transformer
+
        author: 1st Lt Peter Thomas
     '''
-    def __init__(self, input_size, label_size, learning_rate, d_model, num_heads):
+    def __init__(self, input_size, label_size, learning_rate,
+                 d_model, num_heads):
 
+        self.input_size = input_size
+        self.label_size = label_size
+        self.learning_rate = learning_rate
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+
+        assert d_model % num_heads == 0
 
     def weight_variable(self, shape):
 
         initial = tf.truncated_normal(shape, stddev=0.1)
         self.variable_summaries(initial)
         return tf.Variable(initial)
-
 
     def bias_variable(self, shape):
 
@@ -72,22 +84,59 @@ class Model(object):
     def feed_forward_layer(self, x, W, b):
         return tf.nn.relu(tf.matmul(x, W) + b)
 
-    def attention(self, Q, K, V):
-        '''Implements attention layer
+    def attention(self, Q, K, V, mask=0):
+        '''Implements attention layerA
+            Note: Q, K, and V must have matching leading dimensions
+                  K and V must have matching penultimate dimensions
+                  (i.e., seq_len_k = seq_len_v)
 
             :param Q: matrix of set of queries
             :param K: matrix of set of keys
             :param V: matrix of set of values
         '''
         dk = tf.cast(tf.shape(K)[-1], tf.float32)
-        return tf.nn.softmax(tf.matmul(tf.matmul(Q, K)/tf.math.sqrt(dk)), V)
+        attention_logits = tf.matmul(Q, K,
+                    transpose_b=True) / tf.math.sqrt(dk)
+        attention_logits += (mask * -1e9)
+        attention_weights = tf.nn.softmax(attention_logits, axis=-1)
+        output = tf.matmul(attention_weights, V)
+        return output, attention_weights
 
     def multihead_attention(self, Q, K, V):
 
-        wq = self.weight_variable(self.d_model)
-        wk = self.weight_variable(self.d_model)
-        wv = self.weight_variable(self.d_model)
+        wq = self.weight_variable(tf.shape(Q)[1], self.d_model)
+        wk = self.weight_variable(tf.shape(K)[1], self.d_model)
+        wv = self.weight_variable(tf.shape(V)[1], self.d_model)
+
+        bq = self.bias_variable(self.d_model)
+        bk = self.bias_variable(self.d_model)
+        bv = self.bias_variable(self.d_model)
+
+        aq = self.feed_forward_layer(Q, wq, bq)
+        ak = self.feed_forward_layer(K, wk, bk)
+        av = self.feed_forward_layer(V, wv, bv)
 
         batch_size = tf.shape(Q)[0]
 
+        q = self.split_heads(aq, batch_size)
+        k = self.split_heads(ak, batch_size)
+        v = self.split_heads(av, batch_size)
 
+        attention, attention_weights = self.attention(q, k, v)
+
+        attention = tf.transpose(attention, perm=[0, 2, 1, 3])
+
+        concat_attention = tf.reshape(attention,
+                        (batch_size, -1, self.d_model))
+
+        wa = self.weight_variable(tf.shape(concat_attention)[1], self.d_model)
+        ba = self.weight_variable(tf.shape(concat_attention[1], self.d_model))
+
+        output = self.feed_forward_layer(concat_attention, wa, ba)
+
+        return output, attention_weights
+
+    def split_heads(self, x, batch_size):
+
+        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
+        return tf.transpose(x, perm=[0, 2, 1, 3])
