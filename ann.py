@@ -130,7 +130,7 @@ class Model(object):
                         (batch_size, -1, self.d_model))
 
         wa = self.weight_variable(tf.shape(concat_attention)[1], self.d_model)
-        ba = self.weight_variable(tf.shape(concat_attention[1], self.d_model))
+        ba = self.weight_variable(tf.shape(self.d_model))
 
         output = self.feed_forward_layer(concat_attention, wa, ba)
 

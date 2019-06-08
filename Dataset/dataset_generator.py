@@ -31,6 +31,20 @@ class text_DatasetGenerator(object):
                  ):
 
         self.num_text_bodies = num_text_bodies
+        self.batch_size = batch_size
+        self.encode_for_network = encoding_function
+        self.return_filename = return_filename
+        self.dataset = self.build_pipeline(tfrecord_name,
+                                           augment=augment,
+                                           shuffle=shuffle,
+                                           batch_size=batch_size,
+                                           num_threads=num_threads,
+                                           buffer=buffer,
+                                           cache_dataset_memory=cache_dataset_memory,
+                                           cache_dataset_file=cache_dataset_file,
+                                           cache_name=cache_name,
+                                           use_rotating_frame_parser=use_rotating_frame_parser,
+                                           eval_on_coco_test_server=eval_on_coco_test_server)
 
     def __len__(self):
         """
@@ -110,51 +124,84 @@ class text_DatasetGenerator(object):
         return batch, context
 
 
-        def embedding(self, valid_size, valid_window, batch_size, embedding_size,
-                      skip_window, num_skips):
-            """
-            Creates word embeddings for given text.
-            :param valid_size: random set of words to evaluate similarity on
-            :param batch_size: only pick dev samples in the head of the distribution
-            :param embedding_size: dimensions of the embedding vector
-            :param skip_window: How many words to consider left and right
-            :param num_skips: How many times to reuse an input to generate a context
-            :return:
-            """
-            train_inputs = tf.placeholder(tf.int32, shape=[batch_size])
-            train_labels = tf.placeholder(tf.int32, shape=[batch_size, 1])
-            valid_dataset = tf.constant(valid_examples, )
+    def embedding(self, valid_size, valid_window, batch_size, embedding_size,
+                  skip_window, num_skips):
+        """
+        Creates word embeddings for given text.
+        :param valid_size: random set of words to evaluate similarity on
+        :param batch_size: only pick dev samples in the head of the distribution
+        :param embedding_size: dimensions of the embedding vector
+        :param skip_window: How many words to consider left and right
+        :param num_skips: How many times to reuse an input to generate a context
+        :return:
+        """
+        train_inputs = tf.placeholder(tf.int32, shape=[batch_size])
+        train_labels = tf.placeholder(tf.int32, shape=[batch_size, 1])
+        valid_dataset = tf.constant(valid_examples, )
 
-            embeddings = tf.Variable(
-                tf.random_uniform([vocabulary_size, embedding_size], -1.0, 1.0)
-            )
+        embeddings = tf.Variable(
+            tf.random_uniform([vocabulary_size, embedding_size], -1.0, 1.0)
+        )
 
-            embed = tf.nn.embedding_lookup(embeddings, train_inputs)
+        embed = tf.nn.embedding_lookup(embeddings, train_inputs)
 
-            # Constructing variables for softmax
-            weights = tf.Variable(tf.truncated_normal([vocabulary_size, embedding_size],
-                                            stddev=1.0 / np.sqrt(embedding_size)))
-            biases = tf.Variable(tf.zeros([vocabulary_size]))
-            hidden_out = tf.matmul(embed, tf.transpose(weights) + biases)
+        # Constructing variables for softmax
+        weights = tf.Variable(tf.truncated_normal([vocabulary_size, embedding_size],
+                                        stddev=1.0 / np.sqrt(embedding_size)))
+        biases = tf.Variable(tf.zeros([vocabulary_size]))
+        hidden_out = tf.matmul(embed, tf.transpose(weights) + biases)
 
-            # convert train_context to a one-hot format
-            train_one_hot = tf.one_hot(train_context, vocabulary_size)
-            cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=hidden_out,
-                                                labels=train_one_hot))
-            # Construct the SGD optimizer using a learning rate of 1.0
-            optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(cross_entropy)
+        # convert train_context to a one-hot format
+        train_one_hot = tf.one_hot(train_context, vocabulary_size)
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=hidden_out,
+                                            labels=train_one_hot))
+        # Construct the SGD optimizer using a learning rate of 1.0
+        optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(cross_entropy)
 
-            # Compute the cosine similarity between minibatch examples and all embeddings
-            norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
-            normalized_embeddings = embeddings / norm
+        # Compute the cosine similarity between minibatch examples and all embeddings
+        norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+        normalized_embeddings = embeddings / norm
 
-            valid_embeddings = tf.nn.embedding_lookup(
-                normalized_embeddings, valid_dataset
-            )
+        valid_embeddings = tf.nn.embedding_lookup(
+            normalized_embeddings, valid_dataset
+        )
 
-            similarity = tf.matmul(
-                valid_embeddings, normalized_embeddings, transpose_b=True
-            )
+        similarity = tf.matmul(
+            valid_embeddings, normalized_embeddings, transpose_b=True
+        )
 
+        return valid_embeddings, similarity
 
+    def build_pipeline(self,
+                       tfrecord_path,
+                       augment,
+                       shuffle,
+                       batch_size,
+                       num_threads,
+                       buffer,
+                       cache_dataset_memory=False,
+                       cache_dataset_file=False,
+                       cache_name="",
+                       use_rotating_frame_parser=False,
+                       eval_on_coco_test_server=False):
 
+        """
+        Reads in data from a TFRecord file, applies augmentation chain (if
+        desired), shuffles and batches the data.
+        Supports prefetching and multithreading, the intent being to pipeline
+        the training process to lower latency.
+
+        :param tfrecord_path:
+        :param augment: whether to augment data or not.
+        :param shuffle: whether to shuffle data in buffer or not.
+        :param batch_size: Number of examples in each batch returned.
+        :param num_threads: Number of parallel subprocesses to load data.
+        :param buffer: Number of images to prefetch in buffer.
+        :return: the next batch, to be provided when this generator is run (see
+        run_generator())
+        """
+
+        # Create the TFRecord dataset
+        data = tf.data.TFRecordDataset(tfrecord_path)
+
+        # Parse the record into tensors
