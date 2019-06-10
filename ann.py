@@ -45,6 +45,17 @@ def define_scope(function, scope=None, *args, **kwargs):
     return decorator
 
 
+def print_tensor_shape(tensor, string):
+    '''
+    input: tensor and string to describe it
+    
+    borrowed from justin r. fletcher
+    '''
+
+    if __debug__:
+        print('DEBUG' + string, tensor.get_shape())
+
+
 class Model(object):
     '''Tensorflow implementation of Transformer network described in the
        Google paper "Attention Is All You Need"
@@ -58,7 +69,8 @@ class Model(object):
        author: 1st Lt Peter Thomas
     '''
     def __init__(self, input_size, label_size, learning_rate,
-                 d_model, num_heads):
+                 d_model, num_heads, enqueue_threads, val_enqueue_threads,
+                 data_dir, train_file, validation_file):
 
         self.input_size = input_size
         self.label_size = label_size
@@ -66,6 +78,12 @@ class Model(object):
 
         self.d_model = d_model
         self.num_heads = num_heads
+
+        self.enqueue_threads = enqueue_threads
+        self.val_enqueue_threads = val_enqueue_threads
+        self.data_dir = data_dir
+        self.train_file = train_file
+        self.validation_file = validation_file
 
         assert d_model % num_heads == 0
 
@@ -92,6 +110,23 @@ class Model(object):
             tf.summary.histogram('histogram', var)
 
         return
+
+    def create_padding_mask(self, seq):
+        '''Mask all pad tokens in batch of sequence. Ensures model
+           doesn't treat padding as input
+        '''
+        seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
+
+        # add extra dimensions so that we can add the padding
+        # to the attention logits
+        return seq[:, tf.newaxis, tf.newaxis, :] # (batch_size, 1, 1, seq_len)
+
+    def create_look_ahead_mask(self, size):
+        '''Masks future tokens in sequence. Indicates which entries
+           should not be used
+        '''
+        mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
+        return mask # (seq_len, seq_len)
 
     def weight_variable(self, shape):
 
