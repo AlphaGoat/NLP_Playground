@@ -77,3 +77,7 @@ class DatasetGenerator_PtToEng(object):
            string value.
         '''
         return tf.py_function(encode, [pt, en], [tf.int64, tf.int64])
+
+
+if __name__ == '__main__':
+    test_dataset = DatasetGenerator_PtToEng
