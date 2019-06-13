@@ -46,11 +46,11 @@ class DatasetGenerator_PtToEng(object):
     def tokenize_training_set(self, train_examples, 
             target_vocab_size):
         tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-                en.numpy() for pt, en in train_examples),
-                target_vocab_size=target_vocab_size)
+                (en.numpy() for pt, en in train_examples),
+                target_vocab_size=self.target_vocab_size)
         tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus( 
-                pt.numpy() for pt, en in train_examples),
-                target_vocab_size=target_vocab_size)
+                (pt.numpy() for pt, en in train_examples),
+                target_vocab_size=self.target_vocab_size)
 
         return tokenizer_en, tokenizer_pt
 
@@ -78,6 +78,30 @@ class DatasetGenerator_PtToEng(object):
         '''
         return tf.py_function(encode, [pt, en], [tf.int64, tf.int64])
 
+def tokenize_training_set(train_examples,
+        target_vocab_size):
+    tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        (en.numpy() for pt, en in train_examples),
+        target_vocab_size=target_vocab_size)
+
+    tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        (pt.numpy() for pt, en in train_examples),
+        target_vocab_size=target_vocab_size)
+
+    return tokenizer_en, tokenizer_pt
 
 if __name__ == '__main__':
-    test_dataset = DatasetGenerator_PtToEng
+    examples, metadata = tfds.load(
+        'ted_hrlr_translate/pt_to_en',
+        with_info=True, as_supervised=True)
+    train_examples, val_examples = (examples['train'],
+                                              examples['validation'])
+    tokenizer_en, tokenizer_pt = tokenize_training_set(train_examples, 2**13)
+    sample_string = 'Transformer is awesome.'
+    tokenized_string = tokenizer_en.encode(sample_string)
+    print('Tokenized string is {}.'.format(tokenized_string))
+
+    original_string = tokenizer_en.decode(tokenized_string)
+    print('The original string: {}'.format(original_string))
+
+
