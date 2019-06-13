@@ -3,10 +3,11 @@ import tensorflow as tf
 import argparse
 
 import os
+import functools
 
 # Custom modules
-from Dataset.dataset_generator_porteng_translate import DatasetGenerator_PtToEng
-from Dataset.tnn_encoder import PositionalEncoder
+#from Dataset.dataset_generator_porteng_translate import DatasetGenerator_PtToEng
+#from Dataset.tnn_encoder import PositionalEncoder
 
 slim = tf.contrib.slim
 
@@ -151,12 +152,11 @@ class Model(object):
     def feed_forward_layer(self, x, W, b):
         return tf.nn.relu(tf.matmul(x, W) + b)
 
-    def pointwise_feed_forward_layer(self, x, W, b):
+    def pointwise_feed_forward_layer(self, x, W1, b1, W2, b2):
 
-        first_fc = self.fc(x, 
-        second_fc = self.fc(first_fc, tf.get_shape(first_fc[1]), 
-
-
+        first_fc = self.fc(x, W1, b1)
+        second_fc = self.fc(first_fc, W2, b2, relu=False)
+        return second_fc
 
     def fc(self, x, num_in, num_out, name, relu=True):
         '''Create a fully connected layer.
@@ -195,7 +195,7 @@ class Model(object):
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
 
-    def multihead_attention(self, Q, K, V):
+    def multihead_attention(self, Q, K, V, mask):
 
         wq = self.weight_variable(tf.shape(Q)[1], self.d_model)
         wk = self.weight_variable(tf.shape(K)[1], self.d_model)
@@ -215,7 +215,7 @@ class Model(object):
         k = self.split_heads(ak, batch_size)
         v = self.split_heads(av, batch_size)
 
-        attention, attention_weights = self.attention(q, k, v)
+        attention, attention_weights = self.attention(q, k, v, mask)
 
         attention = tf.transpose(attention, perm=[0, 2, 1, 3])
 
@@ -234,87 +234,181 @@ class Model(object):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
+    def encoder_layer(self, x, rate):
+        '''An encoder layer consists of the following sublayers:
+                1. Multi-head attention (with padding''''' \
+
+        # TODO: complete pure TensorFlow implementation of encoder layer
+        attn_output, _ = self.multihead_attention(x, x, x, mask)
+        attn_output = tf.nn.Dropout(attn_output, rate)
+        output1 = tf.layers.batch_normalization(attn_output, epsilon=1e-6)
+
+        W_ffn = self.weight_variable()
+        b_ffn = self.bias_variable()
+        ffn_output = self.pointwise_feed_forward_layer(output1, )
 
 
-def main(flags):
-    '''Adopted from Ian W. McQuaid'''
-    print("Script starting...")
+    def decoder_layer(self, x, rate, look_ahead_mask, padding_mask):
 
-    # Set the GPUs we want the script to use/see
-    print("GPU List = " + str(flags.gpu_list))
-    os.environ["CUDA_VISIBLE_DEVICES"] = flags.gpu_list
+        # TODO: complete pure TensorFlow implementation of decoder layer
+        attn1, attn_W = self.multihead_attention(x, x, x, look_ahead_mask)
 
-    with tf.device('/cpu:0'):
-        if flags.use_test_problem:
-            # TODO: establish general datapath for test data and real data
-            pass
-        else:
-            data = DatasetGenerator_PtToEng
-            print("Building generator...")
-            train_generator = iter(data.train_dataset)
-            val_generator = iter(data.val_dataset)
-            print("Generator built.")
+    def encoder(self, num_layers, input=None, input_vocab_size=None, rate=0.1):
+        '''
+        input: tensor of input corpus. if none, uses instantiation input
+        output: tensor of computed logits
+        '''
+        # TODO: complete pure tensorflow implementation of encoder, based on Justin's code
+        ###############################
 
-        if flags.run_pipeline_test
-            with tf.Session() as sess:
-                pt_batch, en_batch = next(train_generator)
-                print("pt_batch shape = " + str(pt_batch.shape))
-                print("en_batch_shape = " + str(en_batch.shape))
+        print_tensor_shape(self.stimulus_placeholder, 'corpus shape')
+        print_tensor_shape(self.target_placeholder, 'label shape')
+
+        # resize the image tensors to add channels, 1 in this case
+        # required to pass the images to various layers upcoming in the graph
+        images_re = tf.reshape(self.stimulus_placeholder, [-1, 28, 28, 1])
+        print_tensor_shape(images_re, 'reshaped images shape')
 
 
-        # Instantiate positional encoder
+        pos_encoding = positional_encoding(input_vocab_size, self.d_model)
 
-        # Construct generators yielding data batches
+        for n in range(num_layers):
+            with tf.name_scope('encoding_layer' + n):
+                h_enc_output = self.encoder_layer(h_enc_output, rate)
 
-if __name__ == "__main__":
+        # Convolution layer.
+        with tf.name_scope('Conv1'):
 
-    # Instantiating arg parser
-    parser = argparse.ArgumentParser()
+            # weight variable 4d tensor, first two dims are patch (kernel) size
+            # 3rd dim is number of input channels, 4th dim is output channels
+            W_conv1 = self.weight_variable([5, 5, 1, 32])
+            b_conv1 = self.bias_variable([32])
+            h_conv1 = tf.nn.relu(self.conv2d(images_re, W_conv1) + b_conv1)
+            print_tensor_shape(h_conv1, 'Conv1 shape')
 
-    parser.add_argument('--vocab_size', type=int,
-                        default=8500,
-                        help="Number of unique words in corpus")
+        # Pooling layer.
+        with tf.name_scope('Pool1'):
 
-    parser.add_argument('--run_name', type=str,
-                        default='TNN_tensorboard_valid_test',
-                        help="The name of this run, to be used on the weights file and Tensorboard logs")
+            h_pool1 = self.max_pool_2x2(h_conv1)
+            print_tensor_shape(h_pool1, 'MaxPool1 shape')
 
-    # Transformer neural network specific hyperparameters
-    parser.add_argument('--dim_model', type=int,
-                        default=512,
-                        help="Dimension of embeddings")
+        # Conv layer.
+        with tf.name_scope('Conv2'):
 
-    parser.add_argument('--num_layers', type=int,
-                        default=6,
-                        help="Number of transformer layers to instantiate model with")
+            W_conv2 = self.weight_variable([5, 5, 32, 64])
+            b_conv2 = self.bias_variable([64])
+            h_conv2 = tf.nn.relu(self.conv2d(h_pool1, W_conv2) + b_conv2)
+            print_tensor_shape(h_conv2, 'Conv2 shape')
 
-    parser.add_argument('--dff', type=int,
-                        default=2048,
-                        help="Dimensionality of the inner layer")
+        # Pooling layer.
+        with tf.name_scope('Pool2'):
 
-    parser.add_argument('--num_heads', type=int,
-                        default=8,
-                        help="Number of parallel attention layers to use")
+            h_pool2 = self.max_pool_2x2(h_conv2)
+            print_tensor_shape(h_pool2, 'MaxPool2 shape')
 
-    parser.add_argument('--learning_rate', type=float,
-                        default=1e-4,
-                        help='Initial learning rate')
+        # Fully-connected layer.
+        with tf.name_scope('fully_connected1'):
 
-    parser.add_argument('--num_training_epochs', type=int,
-                         default=10000,
-                         help='Number of epochs to train model')
+            h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
+            print_tensor_shape(h_pool2_flat, 'MaxPool2_flat shape')
 
-    parser.add_argument('--patience', type=int,
-                        default=100,
-                        help='Number of epochs without improvement to trigger early stopping')
+            W_fc1 = self.weight_variable([7 * 7 * 64, 1024])
+            b_fc1 = self.bias_variable([1024])
 
-    parser.add_argument('--dataset_buffer_size', type=int,
-                        default=124,
-                        help='Number of images to prefetch in the input pipeline')
+            h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+            print_tensor_shape(h_fc1, 'FullyConnected1 shape')
 
-    parser.add_argument('--num_dataset_threads', type=int,
-                        default=1,
-                        help='Number of threads to be used by the input pipeline')
+        # Dropout layer.
+        with tf.name_scope('dropout'):
 
-    parser.add_argument('--batch_size', type=int,
-                        )
+            h_fc1_drop = tf.nn.dropout(h_fc1, self.keep_prob)
+
+        # Output layer (will be transformed via stable softmax)
+        with tf.name_scope('readout'):
+
+            W_fc2 = self.weight_variable([1024, 10])
+            b_fc2 = self.bias_variable([10])
+
+            readout = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+            print_tensor_shape(readout, 'readout shape')
+
+        return readout
+        ###############################
+
+    def decoder(self):
+        #TODO: complete pure tensorflow implementation of transformer
+        #      decoder based on Justin's code
+        pass
+
+
+############################################################
+# DEBUGGING FUNCTIONS, DELETE WHEN FINISHED
+############################################################
+def multihead_attention(Q, K, V, d_model, mask=0):
+
+    wq = weight_variable(tf.shape(Q)[1], d_model)
+    wk = weight_variable(tf.shape(K)[1], d_model)
+    wv = weight_variable(tf.shape(V)[1], d_model)
+
+    bq = bias_variable(d_model)
+    bk = bias_variable(d_model)
+    bv = bias_variable(d_model)
+
+    aq = feed_forward_layer(Q, wq, bq)
+    ak = feed_forward_layer(K, wk, bk)
+    av = feed_forward_layer(V, wv, bv)
+
+    batch_size = tf.shape(Q)[0]
+
+    q = split_heads(aq, batch_size)
+    k = split_heads(ak, batch_size)
+    v = split_heads(av, batch_size)
+
+    attention, attention_weights = attention(q, k, v, mask)
+
+    attention = tf.transpose(attention, perm=[0, 2, 1, 3])
+
+    concat_attention = tf.reshape(attention,
+                    (batch_size, -1, d_model))
+
+    wa = weight_variable(tf.shape(concat_attention)[1], d_model)
+    ba = weight_variable(tf.shape(d_model))
+
+    output = feed_forward_layer(concat_attention, wa, ba)
+
+    return output, attention_weights
+
+def attention(self, Q, K, V, mask=0):
+    '''Implements attention layerA
+        Note: Q, K, and V must have matching leading dimensions
+              K and V must have matching penultimate dimensions
+              (i.e., seq_len_k = seq_len_v)
+
+        :param Q: matrix of set of queries
+        :param K: matrix of set of keys
+        :param V: matrix of set of values
+    '''
+    dk = tf.cast(tf.shape(K)[-1], tf.float32)
+    attention_logits = tf.matmul(Q, K,
+                                 transpose_b=True) / tf.math.sqrt(dk)
+    attention_logits += (mask * -1e9)
+    attention_weights = tf.nn.softmax(attention_logits, axis=-1)
+    output = tf.matmul(attention_weights, V)
+    return output, attention_weights
+
+def weight_variable(self, shape):
+
+    initial = tf.truncated_normal(shape, stddev=0.1)
+    self.variable_summaries(initial)
+    return tf.Variable(initial)
+
+def bias_variable(self, shape):
+
+    initial = tf.constant(0.1, shape=shape)
+    self.variable_summaries(initial)
+    return tf.Variable(initial)
+
+if __name__ == '__main__':
+    y = tf.random.uniform((1, 60, 512))
+    test_output, attn = multihead_attention(y, y, y, 512, mask=0)
+    test_output.shape, attn.shape
