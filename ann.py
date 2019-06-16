@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 import argparse
 
@@ -120,6 +121,15 @@ class Model(object):
 
         return
 
+    def print_out(self, q, k, v):
+        '''Print the attention weights and the output'''
+        temp_out, temp_attn = attention(
+                        q, k, v, None)
+        print('Attention weights are:')
+        print(temp_attn)
+        print('Output is:')
+        print(temp_out)
+
     def create_padding_mask(self, seq):
         '''Mask all pad tokens in batch of sequence. Ensures model
            doesn't treat padding as input
@@ -177,7 +187,7 @@ class Model(object):
         else:
             return act
 
-    def attention(self, Q, K, V, mask=0):
+    def attention(self, Q, K, V, mask=None):
         '''Implements attention layerA
             Note: Q, K, and V must have matching leading dimensions
                   K and V must have matching penultimate dimensions
@@ -190,7 +200,7 @@ class Model(object):
         dk = tf.cast(tf.shape(K)[-1], tf.float32)
         attention_logits = tf.matmul(Q, K,
                     transpose_b=True) / tf.math.sqrt(dk)
-        attention_logits += (mask * -1e9)
+        if mask: attention_logits += (mask * -1e9)
         attention_weights = tf.nn.softmax(attention_logits, axis=-1)
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
@@ -346,6 +356,9 @@ class Model(object):
 ############################################################
 def multihead_attention(Q, K, V, d_model, mask=0):
 
+    print("Debug code:")
+    tf.print(tf.shape(Q)[1])
+
     wq = weight_variable(tf.shape(Q)[1], d_model)
     wk = weight_variable(tf.shape(K)[1], d_model)
     wv = weight_variable(tf.shape(V)[1], d_model)
@@ -378,7 +391,7 @@ def multihead_attention(Q, K, V, d_model, mask=0):
 
     return output, attention_weights
 
-def attention(self, Q, K, V, mask=0):
+def attention(Q, K, V, mask=0):
     '''Implements attention layerA
         Note: Q, K, and V must have matching leading dimensions
               K and V must have matching penultimate dimensions
@@ -391,24 +404,94 @@ def attention(self, Q, K, V, mask=0):
     dk = tf.cast(tf.shape(K)[-1], tf.float32)
     attention_logits = tf.matmul(Q, K,
                                  transpose_b=True) / tf.math.sqrt(dk)
-    attention_logits += (mask * -1e9)
+    if mask: attention_logits += (mask * -1e9)
     attention_weights = tf.nn.softmax(attention_logits, axis=-1)
     output = tf.matmul(attention_weights, V)
     return output, attention_weights
 
-def weight_variable(self, shape):
+def weight_variable(shape):
 
     initial = tf.truncated_normal(shape, stddev=0.1)
     self.variable_summaries(initial)
     return tf.Variable(initial)
 
-def bias_variable(self, shape):
+def bias_variable(shape):
 
     initial = tf.constant(0.1, shape=shape)
     self.variable_summaries(initial)
     return tf.Variable(initial)
 
+def create_padding_mask(seq):
+    '''Mask all pad tokens in batch of sequence. Ensures model
+       doesn't treat padding as input
+    '''
+    seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
+
+    # add extra dimensions so that we can add the padding
+    # to the attention logits
+    return seq[:, tf.newaxis, tf.newaxis, :] # (batch_size, 1, 1, seq_len)
+
+def create_look_ahead_mask(size):
+    '''Masks future tokens in sequence. Indicates which entries
+       should not be used
+    '''
+    mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
+    return mask # (seq_len, seq_len)
+
+def print_out(q, k, v):
+    '''Print the attention weights and the output'''
+    temp_out, temp_attn = attention(
+                    q, k, v, None)
+    print('Attention weights are:')
+    a = tf.print(temp_attn)
+    print('Output is:')
+    b = tf.print(temp_out)
+
 if __name__ == '__main__':
-    y = tf.random.uniform((1, 60, 512))
-    test_output, attn = multihead_attention(y, y, y, 512, mask=0)
-    test_output.shape, attn.shape
+
+        ########## Debug attention ###############
+    np.set_printoptions(suppress=True)
+
+    temp_k = tf.constant([[10,0,0],
+                          [0,10,0],
+                          [0,0,10],
+                          [0,0,10]], dtype=tf.float32)
+
+    temp_v = tf.constant([[   1,0],
+                          [  10,0],
+                          [ 100,5],
+                          [1000,6]], dtype=tf.float32)
+
+    # This query aligns with the second key
+    # so the second value will be returned
+    temp_q = tf.constant([[0, 10, 0]], dtype=tf.float32)
+    output, weights = attention(temp_q, temp_k, temp_v)
+    a = tf.print(output, [output], "#This is the attention output")
+    b = tf.print(weights, [weights], "#These are the attention weights")
+    with tf.Session() as sess:
+        sess.run(a)
+        sess.run(b)
+
+        ######### DEBUG look ahead mask ############3
+    #x = tf.random.uniform((1, 3))
+    #temp = create_look_ahead_mask(x.shape[1])
+    #a = tf.print(temp, [temp], "#Debugging")
+    
+    
+        ######### DEBUG padding mask ############3
+    #x = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+    #seq = create_padding_mask(x)
+    #a = tf.print(seq, [seq], "#Debugging")
+
+
+        ####### DEBUG Multihead Attention ##############
+    #y = tf.random.uniform((1, 60, 512))
+    #with tf.Session() as sess:
+    #    sess.run(multihead_attention(y, y, y, 512, mask=0))
+    #    print("Printing y:")
+    #    tf.print(y)
+    #    #test_output, attn = multihead_attention(y, y, y, 512, mask=0)
+    #    #test_output.shape, attn.shape
+
+    #with tf.Session() as sess:
+    #    sess.run(a)
