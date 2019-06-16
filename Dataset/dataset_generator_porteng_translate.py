@@ -15,14 +15,19 @@ class DatasetGenerator_PtToEng(object):
                 with_info=True, as_supervised=True)
         self.train_examples, self.val_examples = (examples['train'], 
                                 examples['validation'])
+        self.train_examples = self.train_examples.make_one_shot_iterator()
+        self.val_examples = self.val_examples.make_one_shot_iterator
+        self.next_train_element = self.train.examples.get_next()
         self.target_vocab_size = target_vocab_size
         self.max_length = max_length
         self.buffer_size = buffer_size
         self.batch_size = batch_size
 
         # Generate word tokenizers for training dataset
-        self.tokenizer_en, self.tokenizer_pt = self.tokenize_training_set(
-                self.train_examples, self.target_vocab_size)
+        #self.tokenizer_en, self.tokenizer_pt = self.tokenize_training_set(
+        #        self.train_examples, self.target_vocab_size)
+        self.tokenizer_en = None
+        self.tokenizer_pt = None
 
         # Generate training dataset
         self.train_dataset = self.train_examples.map(self.tf_encode)
@@ -43,12 +48,12 @@ class DatasetGenerator_PtToEng(object):
                 self.batch_size, padded_shapes=([-1], [-1]))
 
 
-    def tokenize_training_set(self, train_examples, 
+    def tokenize_dataset(self, train_examples,
             target_vocab_size):
         tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
                 (en.numpy() for pt, en in train_examples),
                 target_vocab_size=self.target_vocab_size)
-        tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus( 
+        tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
                 (pt.numpy() for pt, en in train_examples),
                 target_vocab_size=self.target_vocab_size)
 
@@ -78,30 +83,62 @@ class DatasetGenerator_PtToEng(object):
         '''
         return tf.py_function(encode, [pt, en], [tf.int64, tf.int64])
 
-def tokenize_training_set(train_examples,
-        target_vocab_size):
-    tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-        (en.numpy() for pt, en in train_examples),
-        target_vocab_size=target_vocab_size)
-
-    tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-        (pt.numpy() for pt, en in train_examples),
-        target_vocab_size=target_vocab_size)
-
-    return tokenizer_en, tokenizer_pt
+#def tokenize_training_set(train_examples,
+#        target_vocab_size):
+#    tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+#        (en.numpy() for pt, en in train_examples),
+#        target_vocab_size=target_vocab_size)
+#
+#    tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+#        (pt.numpy() for pt, en in train_examples),
+#        target_vocab_size=target_vocab_size)
+#
+#    return tokenizer_en, tokenizer_pt
 
 if __name__ == '__main__':
-    examples, metadata = tfds.load(
-        'ted_hrlr_translate/pt_to_en',
-        with_info=True, as_supervised=True)
-    train_examples, val_examples = (examples['train'],
-                                              examples['validation'])
-    tokenizer_en, tokenizer_pt = tokenize_training_set(train_examples, 2**13)
-    sample_string = 'Transformer is awesome.'
-    tokenized_string = tokenizer_en.encode(sample_string)
-    print('Tokenized string is {}.'.format(tokenized_string))
 
-    original_string = tokenizer_en.decode(tokenized_string)
-    print('The original string: {}'.format(original_string))
+    dataset = DatasetGenerator_PtToEng()
+    list_of_training_elements = list()
+    with tf.Session as sess:
+        while True:
+            try:
+                train_element = sess.run(dataset.next_train_element)
+                list_of_training_elements.append(train_element)
+            except tf.errors.OutOfRangeError:
+                break
+        # Generate tokenizers
+        tokenizer_en, tokenizer_pt = sess.run(
+                dataset.tokenize_dataset(list_of_training_elements,
+                dataset.target_vocab_size))
+
+        dataset.tokenizer_en = tokenizer_en
+        dataset.tokenizer_pt = tokenizer_pt
+
+        sample_string = 'Transformer is awesome.'
+
+        tokenized_string = tokenizer_en.encode(sample_string)
+        print('The original string: {}'.format(tokenized_string))
+
+        original_string = tokenizer_en.decode(tokenizer_string)
+        print('The original string: {}'.format(original_string))
+
+        assert original_string == sample_string
+
+
+
+
+
+    #examples, metadata = tfds.load(
+    #    'ted_hrlr_translate/pt_to_en',
+    #    with_info=True, as_supervised=True)
+    #train_examples, val_examples = (examples['train'],
+    #                                          examples['validation'])
+    #tokenizer_en, tokenizer_pt = tokenize_training_set(train_examples, 2**13)
+    #sample_string = 'Transformer is awesome.'
+    #tokenized_string = tokenizer_en.encode(sample_string)
+    #print('Tokenized string is {}.'.format(tokenized_string))
+
+    #original_string = tokenizer_en.decode(tokenized_string)
+    #print('The original string: {}'.format(original_string))
 
 
