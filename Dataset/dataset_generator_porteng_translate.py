@@ -124,6 +124,14 @@ if __name__ == '__main__':
 
         assert original_string == sample_string
 
+        # words can be broken into subwords if the word is not included
+        # in the dictionary
+        for ts in tokenized_string:
+            print('{} ----> {}'.format(ts, tokenizer_en.decode([ts])))
+
+        pt_batch, en_batch = next(iter(val_dataset))
+        print(pt_batch, en_batch)
+
 
 
 
