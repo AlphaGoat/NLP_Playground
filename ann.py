@@ -394,7 +394,8 @@ def multihead_attention(Q, K, V, d_model, mask=0):
 def attention(Q, K, V, mask=0):
     '''Implements attention layerA
         Note: Q, K, and V must have matching leading dimensions
-              K and V must have matching penultimate dimensions
+              K and V must have matching p:w
+              enultimate dimensions
               (i.e., seq_len_k = seq_len_v)
 
         :param Q: matrix of set of queries
@@ -402,18 +403,29 @@ def attention(Q, K, V, mask=0):
         :param V: matrix of set of values
     '''
     dk = tf.cast(tf.shape(K)[-1], tf.float32)
-    attention_logits = tf.matmul(Q, K,
-                                 transpose_b=True) / tf.math.sqrt(dk)
+    dk = tf.Print(dk, [dk], "printing out dk: ")
+    matmul_qk = tf.matmul(Q, K, transpose_b=True)
+
+    matmul_qk = tf.Print(matmul_qk, [matmul_qk, tf.shape(matmul_qk)], "printing out matmul_qk: ")
+
+    attention_logits = matmul_qk / tf.math.sqrt(dk)
+
+    attention_logits = tf.Print(attention_logits, [attention_logits, tf.shape(attention_logits)], "printing out attention_logits: ")
+
     if mask: attention_logits += (mask * -1e9)
     attention_weights = tf.nn.softmax(attention_logits, axis=-1)
+    attention_weights = tf.Print(attention_weights, [attention_weights], "printing out attention_weights: ")
     output = tf.matmul(attention_weights, V)
     return output, attention_weights
+
+
 
 def weight_variable(shape):
 
     initial = tf.truncated_normal(shape, stddev=0.1)
     self.variable_summaries(initial)
     return tf.Variable(initial)
+
 
 def bias_variable(shape):
 
@@ -465,12 +477,13 @@ if __name__ == '__main__':
     # This query aligns with the second key
     # so the second value will be returned
     temp_q = tf.constant([[0, 10, 0]], dtype=tf.float32)
-    output, weights = attention(temp_q, temp_k, temp_v)
-    a = tf.print(output, [output], "#This is the attention output")
-    b = tf.print(weights, [weights], "#These are the attention weights")
     with tf.Session() as sess:
-        sess.run(a)
-        sess.run(b)
+    #    a = tf.print(output, [output], "#This is the attention output")
+    #    b = tf.print(a, [weights, output], "#These are the attention weights")
+    #    with tf.control_dependencies([a,b]):
+    #        test_out = tf.debugging.assert_type(output, tf.float32)
+            output, weights = sess.run(attention(temp_q, temp_k, temp_v))
+
 
         ######### DEBUG look ahead mask ############3
     #x = tf.random.uniform((1, 3))

@@ -15,9 +15,9 @@ class DatasetGenerator_PtToEng(object):
                 with_info=True, as_supervised=True)
         self.train_examples, self.val_examples = (examples['train'], 
                                 examples['validation'])
-        self.train_examples = self.train_examples.make_one_shot_iterator()
-        self.val_examples = self.val_examples.make_one_shot_iterator
-        self.next_train_element = self.train.examples.get_next()
+        #self.train_examples = self.train_examples.make_one_shot_iterator()
+        #self.val_examples = self.val_examples.make_one_shot_iterator
+        #self.next_train_element = self.train_examples.get_next()
         self.target_vocab_size = target_vocab_size
         self.max_length = max_length
         self.buffer_size = buffer_size
@@ -31,9 +31,7 @@ class DatasetGenerator_PtToEng(object):
 
         # Generate training dataset
         self.train_dataset = self.train_examples.map(self.tf_encode)
-        self.train_dataset = self.train_dataset.filter(
-                self.filter_max_length(max_length=self.max_length))
-
+        self.train_dataset = self.train_dataset.filter(self.filter_max_length)
         self.train_dataset = self.train_dataset.cache()
         self.train_dataset = self.train_dataset.shuffle(
                 self.buffer_size).padded_batch(self.batch_size,
@@ -47,14 +45,17 @@ class DatasetGenerator_PtToEng(object):
                 self.filter_max_length).padded_batch(
                 self.batch_size, padded_shapes=([-1], [-1]))
 
+        self.train_examples = self.train_examples.make_one_shot_iterator()
+        self.val_examples = self.val_examples.make_one_shot_iterator()
+        self.next_train_element = self.train_examples.get_next()
 
     def tokenize_dataset(self, train_examples,
             target_vocab_size):
         tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-                (en.numpy() for pt, en in train_examples),
+                (en for pt, en in train_examples),
                 target_vocab_size=self.target_vocab_size)
         tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-                (pt.numpy() for pt, en in train_examples),
+                (pt for pt, en in train_examples),
                 target_vocab_size=self.target_vocab_size)
 
         return tokenizer_en, tokenizer_pt
@@ -81,7 +82,7 @@ class DatasetGenerator_PtToEng(object):
            recieves an eager tensor with numpy attribute containing 
            string value.
         '''
-        return tf.py_function(encode, [pt, en], [tf.int64, tf.int64])
+        return tf.py_function(self.encode, [pt, en], [tf.int64, tf.int64])
 
 #def tokenize_training_set(train_examples,
 #        target_vocab_size):
@@ -99,8 +100,9 @@ if __name__ == '__main__':
 
     dataset = DatasetGenerator_PtToEng()
     list_of_training_elements = list()
-    with tf.Session as sess:
+    with tf.Session() as sess:
         while True:
+            print("In the loop")
             try:
                 train_element = sess.run(dataset.next_train_element)
                 list_of_training_elements.append(train_element)
