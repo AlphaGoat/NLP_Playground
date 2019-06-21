@@ -197,8 +197,9 @@ class Model(object):
             :param K: matrix of set of keys
             :param V: matrix of set of values
         '''
+        dim_k = tf.shape(K)
         dk = tf.cast(tf.shape(K)[-1], tf.float32)
-        attention_logits = tf.matmul(Q, K,
+         = tf.matmul(Q, K,
                     transpose_b=True) / tf.math.sqrt(dk)
         if mask: attention_logits += (mask * -1e9)
         attention_weights = tf.nn.softmax(attention_logits, axis=-1)
@@ -346,26 +347,25 @@ class Model(object):
         ###############################
 
     def decoder(self):
-        #TODO: complete pure tensorflow implementation of transformer
-        #      decoder based on Justin's code
+        # TODO: complete pure tensorflow implementation of transformer decoder
         pass
 
 
 ############################################################
 # DEBUGGING FUNCTIONS, DELETE WHEN FINISHED
 ############################################################
-def multihead_attention(Q, K, V, d_model, mask=0):
+def multihead_attention(Q, K, V, d_model, num_heads, mask=0):
 
     print("Debug code:")
     tf.print(tf.shape(Q)[1])
 
-    wq = weight_variable(tf.shape(Q)[1], d_model)
-    wk = weight_variable(tf.shape(K)[1], d_model)
-    wv = weight_variable(tf.shape(V)[1], d_model)
+    wq = weight_variable([tf.shape(Q)[1], d_model])
+    wk = weight_variable([tf.shape(K)[1], d_model])
+    wv = weight_variable([tf.shape(V)[1], d_model])
 
-    bq = bias_variable(d_model)
-    bk = bias_variable(d_model)
-    bv = bias_variable(d_model)
+    bq = bias_variable([d_model])
+    bk = bias_variable([d_model])
+    bv = bias_variable([d_model])
 
     aq = feed_forward_layer(Q, wq, bq)
     ak = feed_forward_layer(K, wk, bk)
@@ -373,19 +373,23 @@ def multihead_attention(Q, K, V, d_model, mask=0):
 
     batch_size = tf.shape(Q)[0]
 
-    q = split_heads(aq, batch_size)
-    k = split_heads(ak, batch_size)
-    v = split_heads(av, batch_size)
+    depth = d_model // num_heads
 
-    attention, attention_weights = attention(q, k, v, mask)
+    q = split_heads(aq, batch_size, d_model, num_heads, depth)
+    k = split_heads(ak, batch_size, d_model, num_heads, depth)
+    v = split_heads(av, batch_size, d_model, num_heads, depth)
 
-    attention = tf.transpose(attention, perm=[0, 2, 1, 3])
+    attention_output, attention_weights = attention(q, k, v, mask)
 
-    concat_attention = tf.reshape(attention,
+    attention_weights = tf.Print(attention_weights, [attention_weights, attention_weights.shape])
+
+    attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
+
+    concat_attention = tf.reshape(attention_output,
                     (batch_size, -1, d_model))
 
-    wa = weight_variable(tf.shape(concat_attention)[1], d_model)
-    ba = weight_variable(tf.shape(d_model))
+    wa = weight_variable([tf.shape(concat_attention)[1], d_model])
+    ba = bias_variable([tf.shape(d_model)])
 
     output = feed_forward_layer(concat_attention, wa, ba)
 
@@ -403,19 +407,20 @@ def attention(Q, K, V, mask=0):
         :param V: matrix of set of values
     '''
     dk = tf.cast(tf.shape(K)[-1], tf.float32)
-    dk = tf.Print(dk, [dk], "printing out dk: ")
+    #dk = tf.Print(dk, [dk], "printing out dk: ")
     matmul_qk = tf.matmul(Q, K, transpose_b=True)
 
-    matmul_qk = tf.Print(matmul_qk, [matmul_qk, tf.shape(matmul_qk)], "printing out matmul_qk: ")
+    #matmul_qk = tf.Print(matmul_qk, [matmul_qk, tf.shape(matmul_qk)], "printing out matmul_qk: ")
 
     attention_logits = matmul_qk / tf.math.sqrt(dk)
 
-    attention_logits = tf.Print(attention_logits, [attention_logits, tf.shape(attention_logits)], "printing out attention_logits: ")
+    #attention_logits = tf.Print(attention_logits, [attention_logits, tf.shape(attention_logits)], "printing out attention_logits: ")
 
     if mask: attention_logits += (mask * -1e9)
     attention_weights = tf.nn.softmax(attention_logits, axis=-1)
     attention_weights = tf.Print(attention_weights, [attention_weights], "printing out attention_weights: ")
     output = tf.matmul(attention_weights, V)
+    output = tf.Print(output, [output], "printing output")
     return output, attention_weights
 
 
@@ -423,14 +428,14 @@ def attention(Q, K, V, mask=0):
 def weight_variable(shape):
 
     initial = tf.truncated_normal(shape, stddev=0.1)
-    self.variable_summaries(initial)
+    #variable_summaries(initial)
     return tf.Variable(initial)
 
 
 def bias_variable(shape):
 
     initial = tf.constant(0.1, shape=shape)
-    self.variable_summaries(initial)
+    #variable_summaries(initial)
     return tf.Variable(initial)
 
 def create_padding_mask(seq):
@@ -459,6 +464,33 @@ def print_out(q, k, v):
     print('Output is:')
     b = tf.print(temp_out)
 
+def feed_forward_layer(x, W, b):
+    return tf.nn.relu(tf.matmul(x, W) + b)
+
+
+def split_heads(x, batch_size, num_heads, depth):
+
+    x = tf.reshape(x, (batch_size, -1, num_heads, depth))
+    return tf.transpose(x, perm=[0, 2, 1, 3])
+
+#def google_attention(q, k, v, mask):
+#
+#    matmul_qk = tf.matmul(q, k, transpose_b=True)
+#
+#    dk = tf.cast(tf.shape(k)[-1], tf.float32)
+#    scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
+#
+#    if mask is not None:
+#        scaled_attention_logits += (mask * -1e9)
+#
+#    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
+#    attention_weights = tf.Print(attention_weights, [attention_weights])
+#
+#    output = tf.matmul(attention_weights, v)
+#    output = tf.Print(output, [output])
+#
+#    return output, attention_weights
+
 if __name__ == '__main__':
 
         ########## Debug attention ###############
@@ -477,12 +509,16 @@ if __name__ == '__main__':
     # This query aligns with the second key
     # so the second value will be returned
     temp_q = tf.constant([[0, 10, 0]], dtype=tf.float32)
+
+    y = tf.random.uniform((1, 60, 512))
     with tf.Session() as sess:
     #    a = tf.print(output, [output], "#This is the attention output")
     #    b = tf.print(a, [weights, output], "#These are the attention weights")
     #    with tf.control_dependencies([a,b]):
     #        test_out = tf.debugging.assert_type(output, tf.float32)
-            output, weights = sess.run(attention(temp_q, temp_k, temp_v))
+        out, attn = sess.run(multihead_attention(y, y, y, 512, 8, mask=None))
+
+        #output, weights = sess.run(attention(temp_q, temp_k, temp_v, None))
 
 
         ######### DEBUG look ahead mask ############3
