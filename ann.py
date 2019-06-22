@@ -78,17 +78,21 @@ class Model(object):
 
        author: 1st Lt Peter Thomas
     '''
-    def __init__(self, input_size, label_size, learning_rate,
+    def __init__(self, input_size, label_size, batch_size, learning_rate,
                  d_model, num_heads, enqueue_threads, val_enqueue_threads,
                  data_dir, train_file, validation_file):
 
+        # training parameters
         self.input_size = input_size
         self.label_size = label_size
         self.learning_rate = learning_rate
+        self.batch_size = batch_size
 
+        # model parameters
         self.d_model = d_model
         self.num_heads = num_heads
 
+        # computing parameters
         self.enqueue_threads = enqueue_threads
         self.val_enqueue_threads = val_enqueue_threads
         self.data_dir = data_dir
@@ -188,7 +192,7 @@ class Model(object):
             return act
 
     def attention(self, Q, K, V, mask=None):
-        '''Implements attention layerA
+        '''Implements attention layer
             Note: Q, K, and V must have matching leading dimensions
                   K and V must have matching penultimate dimensions
                   (i.e., seq_len_k = seq_len_v)
@@ -197,9 +201,8 @@ class Model(object):
             :param K: matrix of set of keys
             :param V: matrix of set of values
         '''
-        dim_k = tf.shape(K)
         dk = tf.cast(tf.shape(K)[-1], tf.float32)
-         = tf.matmul(Q, K,
+        attention_logits = tf.matmul(Q, K,
                     transpose_b=True) / tf.math.sqrt(dk)
         if mask: attention_logits += (mask * -1e9)
         attention_weights = tf.nn.softmax(attention_logits, axis=-1)
@@ -207,6 +210,82 @@ class Model(object):
         return output, attention_weights
 
     def multihead_attention(self, Q, K, V, mask):
+        '''Implementaion of multihead attention, which maps learned
+           linear projections to representations in dq, dk, and dv
+           dimensions. Attention is performed on all of these parallel
+           projections. This parallel set of attention layers are called
+           "heads"
+
+           :param Q: matrix of set of queries
+           :param K: matrix of set of keys
+           :param V: matrix of set of values
+        '''
+
+        # initialize list for parallel attention layers (or heads)
+        parrallel_attention_layers = []
+
+        dk = tf.cast(tf.shape(K)[-1], tf.float32)
+        dv = tf.cast(tf.shape(V)[-1], tf.float32)
+
+        # Prepare heads
+        for _ in range(self.num_heads):
+
+            W_q = self.weight_variable([self.batch_size, self.d_model, dk])
+            W_k = self.weight_variable([self.batch_size, self.d_model, dk])
+            W_v = self.weight_variable([self.batch_size, self.d_model, dv])
+
+            QW = tf.matmul(Q, W_q)
+            KW = tf.matmul(K, W_k)
+            VW = tf.matmul(V, W_v)
+
+            attention_output, attention_weights = self.attention(
+                                QW, KW, VW, mask)
+            parrallel_attention_layers.append((attention_output,
+                                               attention_weights))
+
+        # concatenate heads
+        W_o = self.weight_variable([self.num_heads * dv, self.d_model])
+        for attention_layer in parrallel_attention_layers:
+        concat = tf.concat()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def google_multihead_attention(self, Q, K, V, mask):
 
         wq = self.weight_variable(tf.shape(Q)[1], self.d_model)
         wk = self.weight_variable(tf.shape(K)[1], self.d_model)
