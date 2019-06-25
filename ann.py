@@ -1,4 +1,4 @@
-import tensorflow as tf
+    import tensorflow as tf
 import numpy as np
 
 import argparse
@@ -222,7 +222,8 @@ class Model(object):
         '''
 
         # initialize list for parallel attention layers (or heads)
-        parrallel_attention_layers = []
+        parallel_attention_layers = tf.Variable([],dtype=tf.float32)
+        parallel_attention_weights = list()
 
         dk = tf.cast(tf.shape(K)[-1], tf.float32)
         dv = tf.cast(tf.shape(V)[-1], tf.float32)
@@ -240,50 +241,22 @@ class Model(object):
 
             attention_output, attention_weights = self.attention(
                                 QW, KW, VW, mask)
-            parrallel_attention_layers.append((attention_output,
-                                               attention_weights))
+            parallel_attention_layers = tf.concat([parallel_attention_layers,
+                                                   attention_output], 0)
+            parallel_attention_weights.append(attention_weights)
 
         # concatenate heads
+        parallel_attention_layers = tf.reshape(parallel_attention_layers,
+                                               self.batch_size, -1, self.d_model)
         W_o = self.weight_variable([self.num_heads * dv, self.d_model])
-        for attention_layer in parrallel_attention_layers:
-        concat = tf.concat()
+        # Note: no bias parameters are actually initialized for the final
+        #       output of the multihead attention layer, this variable is
+        #       just an artifact needed as input for the feed forward layer
+        #       function
+        b_o = tf.zeros([self.d_model], dtype=tf.float32)
+        output = self.feed_forward_layer(parallel_attention_layers, W_o, b_o)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return output, parallel_attention_weights
 
     def google_multihead_attention(self, Q, K, V, mask):
 
@@ -433,7 +406,87 @@ class Model(object):
 ############################################################
 # DEBUGGING FUNCTIONS, DELETE WHEN FINISHED
 ############################################################
-def multihead_attention(Q, K, V, d_model, num_heads, mask=0):
+
+def encoder(x, batch_size, d_model):
+    '''Encoding function for transformer. The encoder is composed of
+       six layers, which are in turn composed of two sub-layers each.
+       The first of the sub layers is multi-head self-attention, while
+       the second is a position-wise feed forward layer
+    '''
+
+    # N = 0
+    d_x = tf.shape(x)[-1]
+    with tf.name_scope('Encoder Layer 0'):
+
+        mha_output_0 = multihead_attention()
+        W_01 = W_02 = weight_variable([batch_size, d_x, d_model])
+        b_01 = b_02 = bias_variable([d_model])
+        output_0 = poswise_feed_forward_layer(mha_output_0, W_01,
+                                              W_02, b_01, b_02)
+
+    with tf.name_scope('Encoder Layer 1'):
+
+        mha_output_1 = multihead_attention()
+        W_11 = weight_variable([])
+        b_11 = bias_variable([d_model])
+        W_12 = weight_variable()
+        b_12 = bias_variable([d_model])
+        output_1 = poswise_feed_forward_layer(mha_output_1, W_11,
+                                              W_12, b_11, b_12)
+
+    with tf.name_scope('Encoder Layer 2'):
+
+        mha_output_2 = multihead_attention()
+        W_21 = weight_variable([])
+        b_21 = bias_variable([d_model])
+        W_22 = weight_variable()
+        b_22 = bias_variable([d_model])
+        output_2 = poswise_feed_forward_layer(mha_output_2, W_21,
+                                              W_22, b_21, b_22)
+
+    with tf.name_scope('Encoder Layer 3'):
+
+        mha_output_3 = multihead_attention()
+        W_31 = weight_variable([])
+        b_31 = bias_variable([d_model])
+        W_32 = weight_variable()
+        b_32 = bias_variable([d_model])
+        output_3 = poswise_feed_forward_layer(mha_output_3, W_31,
+                                              W_32, b_31, b_32)
+
+    with tf.name_scope('Encoder Layer 4'):
+
+        mha_output_4 = multihead_attention()
+        W_41 = weight_variable([])
+        b_41 = bias_variable([d_model])
+        W_42 = weight_variable()
+        b_42 = bias_variable([d_model])
+        output_4 = poswise_feed_forward_layer(mha_output_4, W_41,
+                                              W_42, b_41, b_42)
+
+    with tf.name_scope('Encoder Layer 5'):
+
+        mha_output_5 = multihead_attention()
+        W_51 = weight_variable([batch_size, ])
+        b_51 = bias_variable([d_model])
+        W_52 = weight_variable()
+        b_52 = bias_variable([d_model])
+        output_4 = poswise_feed_forward_layer(mha_output_5, W_51,
+                                              W_52, b_51, b_52)
+
+
+    output = output_4
+
+    return output
+
+def poswise_feed_forward_layer(x, W1, W2, b1, b2):
+
+    output = feed_forward_layer(x, W1, b1)
+    return feed_forward_layer(tf.math.maximum(0, output), W2, b2)
+
+
+
+def google_multihead_attention(Q, K, V, d_model, num_heads, mask=0):
 
     print("Debug code:")
     tf.print(tf.shape(Q)[1])
@@ -570,6 +623,62 @@ def split_heads(x, batch_size, num_heads, depth):
 #
 #    return output, attention_weights
 
+
+def multihead_attention(Q, K, V, mask, num_heads, batch_size, d_model):
+    '''Implementation of multihead attention, which maps learned
+       linear projections to representations in dq, dk, and dv
+       dimensions. Attention is performed on all of these parallel
+       projections. This parallel set of attention layers are called
+       "heads"
+
+       :param Q: matrix of set of queries
+       :param K: matrix of set of keys
+       :param V: matrix of set of values
+    '''
+
+    assert d_model % num_heads == 0
+
+    # initialize list for parallel attention layers (or heads)
+    #parallel_attention_weights = list()
+
+    dk = tf.shape(K)[1]
+    #dk = tf.Print(dk, [dk], "This is the value of dk")
+    dv = tf.shape(V)[1]
+
+    # Prepare heads
+    W_q = weight_variable([batch_size, d_model, dk])
+    W_k = weight_variable([batch_size, d_model, dk])
+    W_v = weight_variable([batch_size, d_model, dv])
+
+    QW = tf.matmul(Q, W_q)
+    KW = tf.matmul(K, W_k)
+    VW = tf.matmul(V, W_v)
+
+    # Splitting heads. The dimensions of each head will be the dimension of the model
+    # divided by the number of heads to be used
+
+    QW_split = tf.reshape(QW, (batch_size, -1, num_heads, d_model // num_heads))
+    KW_split = tf.reshape(KW, (batch_size, -1, num_heads, d_model // num_heads))
+    VW_split = tf.reshape(VW, (batch_size, -1, num_heads, d_model // num_heads))
+
+    # Pass heads through attention layer
+    attention_output, attention_weights = attention(QW_split, KW_split, VW_split, mask)
+    #attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
+
+    # Concatenate heads
+    concat_attention = tf.reshape(attention_output, (batch_size, d_model, -1))
+
+    # Pass concatenated heads through feedforward layer
+    W_o = weight_variable([batch_size, num_heads * dv, d_model])
+    # Note: no bias parameters are actually initialized for the final
+    #       output of the multihead attention layer, this variable is
+    #       just an artifact needed as input for the feed forward layer
+    #       function
+    b_o = tf.zeros([d_model], dtype=tf.float32)
+    output = feed_forward_layer(concat_attention, W_o, b_o)
+
+    return output, attention_weights
+
 if __name__ == '__main__':
 
         ########## Debug attention ###############
@@ -590,13 +699,17 @@ if __name__ == '__main__':
     temp_q = tf.constant([[0, 10, 0]], dtype=tf.float32)
 
     y = tf.random.uniform((1, 60, 512))
+
+    dk = tf.shape(y)[1]
+    print_dk = tf.Print(dk, [dk], "This is the value of dk")
     with tf.Session() as sess:
     #    a = tf.print(output, [output], "#This is the attention output")
     #    b = tf.print(a, [weights, output], "#These are the attention weights")
     #    with tf.control_dependencies([a,b]):
     #        test_out = tf.debugging.assert_type(output, tf.float32)
-        out, attn = sess.run(multihead_attention(y, y, y, 512, 8, mask=None))
-
+        #out, weights = sess.run(multihead_attention(y,y,y,0,8,1,512))
+        layer, weights = sess.run(multihead_attention(y,y,y,0,8,1,512))
+        #stuff = sess.run(print_dk)
         #output, weights = sess.run(attention(temp_q, temp_k, temp_v, None))
 
 
