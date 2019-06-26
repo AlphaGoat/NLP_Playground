@@ -1,4 +1,4 @@
-    import tensorflow as tf
+import tensorflow as tf
 import numpy as np
 
 import argparse
@@ -427,53 +427,42 @@ def encoder(x, batch_size, d_model):
     with tf.name_scope('Encoder Layer 1'):
 
         mha_output_1 = multihead_attention()
-        W_11 = weight_variable([])
-        b_11 = bias_variable([d_model])
-        W_12 = weight_variable()
-        b_12 = bias_variable([d_model])
+        W_11 = W_12 = weight_variable([batch_size, d_x, d_model])
+        b_11 = b_12 = bias_variable([d_model])
         output_1 = poswise_feed_forward_layer(mha_output_1, W_11,
                                               W_12, b_11, b_12)
 
     with tf.name_scope('Encoder Layer 2'):
 
         mha_output_2 = multihead_attention()
-        W_21 = weight_variable([])
-        b_21 = bias_variable([d_model])
-        W_22 = weight_variable()
-        b_22 = bias_variable([d_model])
+        W_21 = W_22 = weight_variable([batch_size, d_x, d_model])
+        b_21 = b_22 = bias_variable([d_model])
         output_2 = poswise_feed_forward_layer(mha_output_2, W_21,
                                               W_22, b_21, b_22)
 
     with tf.name_scope('Encoder Layer 3'):
 
         mha_output_3 = multihead_attention()
-        W_31 = weight_variable([])
-        b_31 = bias_variable([d_model])
-        W_32 = weight_variable()
-        b_32 = bias_variable([d_model])
+        W_31 = W_32 = weight_variable([batch_size, d_x, d_model])
+        b_31 = b_32 = bias_variable([d_model])
         output_3 = poswise_feed_forward_layer(mha_output_3, W_31,
                                               W_32, b_31, b_32)
 
     with tf.name_scope('Encoder Layer 4'):
 
         mha_output_4 = multihead_attention()
-        W_41 = weight_variable([])
-        b_41 = bias_variable([d_model])
-        W_42 = weight_variable()
-        b_42 = bias_variable([d_model])
+        W_41 = W_42 = weight_variable([batch_size, d_x, d_model])
+        b_41 = b_42 = bias_variable([d_model])
         output_4 = poswise_feed_forward_layer(mha_output_4, W_41,
                                               W_42, b_41, b_42)
 
     with tf.name_scope('Encoder Layer 5'):
 
         mha_output_5 = multihead_attention()
-        W_51 = weight_variable([batch_size, ])
-        b_51 = bias_variable([d_model])
-        W_52 = weight_variable()
-        b_52 = bias_variable([d_model])
+        W_51 = W_52 = weight_variable([batch_size, d_x, d_model])
+        b_51 = b_52 = bias_variable([d_model])
         output_4 = poswise_feed_forward_layer(mha_output_5, W_51,
                                               W_52, b_51, b_52)
-
 
     output = output_4
 
@@ -538,7 +527,7 @@ def attention(Q, K, V, mask=0):
         :param K: matrix of set of keys
         :param V: matrix of set of values
     '''
-    dk = tf.cast(tf.shape(K)[-1], tf.float32)
+    dk = tf.cast(tf.shape(K)[-2], tf.float32)
     #dk = tf.Print(dk, [dk], "printing out dk: ")
     matmul_qk = tf.matmul(Q, K, transpose_b=True)
 
@@ -629,7 +618,9 @@ def multihead_attention(Q, K, V, mask, num_heads, batch_size, d_model):
        linear projections to representations in dq, dk, and dv
        dimensions. Attention is performed on all of these parallel
        projections. This parallel set of attention layers are called
-       "heads"
+       "heads". Each of these heads has reduced dimensionality, so
+       the computational cost of performing attention on all of these
+       heads is the same as if the original matrices had not been split
 
        :param Q: matrix of set of queries
        :param K: matrix of set of keys
@@ -639,37 +630,36 @@ def multihead_attention(Q, K, V, mask, num_heads, batch_size, d_model):
     assert d_model % num_heads == 0
 
     # initialize list for parallel attention layers (or heads)
-    #parallel_attention_weights = list()
-
-    dk = tf.shape(K)[1]
-    #dk = tf.Print(dk, [dk], "This is the value of dk")
-    dv = tf.shape(V)[1]
 
     # Prepare heads
-    W_q = weight_variable([batch_size, d_model, dk])
-    W_k = weight_variable([batch_size, d_model, dk])
-    W_v = weight_variable([batch_size, d_model, dv])
+    W_q = weight_variable([batch_size, d_model, d_model])
+    W_k = weight_variable([batch_size, d_model, d_model])
+    W_v = weight_variable([batch_size, d_model, d_model])
 
-    QW = tf.matmul(Q, W_q)
-    KW = tf.matmul(K, W_k)
-    VW = tf.matmul(V, W_v)
+    QW = tf.matmul(Q, W_q) # (batch_size, seq_len, d_model)
+    KW = tf.matmul(K, W_k) # (batch_size, seq_len, d_model)
+    VW = tf.matmul(V, W_v) # (batch_size, seq_len, d_model)
 
     # Splitting heads. The dimensions of each head will be the dimension of the model
     # divided by the number of heads to be used
 
-    QW_split = tf.reshape(QW, (batch_size, -1, num_heads, d_model // num_heads))
-    KW_split = tf.reshape(KW, (batch_size, -1, num_heads, d_model // num_heads))
-    VW_split = tf.reshape(VW, (batch_size, -1, num_heads, d_model // num_heads))
+    QW_split = tf.reshape(QW, (batch_size, -1, num_heads, d_model // num_heads)) # (batch_size, seq_len, num_heads, depth)
+    KW_split = tf.reshape(KW, (batch_size, -1, num_heads, d_model // num_heads)) # (batch_size, seq_len, num_heads, depth)
+    VW_split = tf.reshape(VW, (batch_size, -1, num_heads, d_model // num_heads)) # (batch_size, seq_len, num_heads, depth)
+
+    QW_split = tf.transpose(QW_split, perm=[0, 2, 1, 3]) # (batch_size, num_heads, seq_len, d_model // num_heads)
+    KW_split = tf.transpose(KW_split, perm=[0, 2, 1, 3]) # (batch_size, num_heads, seq_len, d_model // num_heads)
+    VW_split = tf.transpose(VW_split, perm=[0, 2, 1, 3]) # (batch_size, num_heads, seq_len, d_model // num_heads)
 
     # Pass heads through attention layer
     attention_output, attention_weights = attention(QW_split, KW_split, VW_split, mask)
-    #attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
     # Concatenate heads
-    concat_attention = tf.reshape(attention_output, (batch_size, d_model, -1))
+    attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3]) # (batch_size, seq_len, num_heads, depth)
+    concat_attention = tf.reshape(attention_output, (batch_size, -1, d_model)) # (batch_size, seq_len, d_model)
 
     # Pass concatenated heads through feedforward layer
-    W_o = weight_variable([batch_size, num_heads * dv, d_model])
+    W_o = weight_variable([batch_size, d_model, d_model])
     # Note: no bias parameters are actually initialized for the final
     #       output of the multihead attention layer, this variable is
     #       just an artifact needed as input for the feed forward layer
@@ -681,7 +671,7 @@ def multihead_attention(Q, K, V, mask, num_heads, batch_size, d_model):
 
 if __name__ == '__main__':
 
-        ########## Debug attention ###############
+    ########## Debug attention ###############
     np.set_printoptions(suppress=True)
 
     temp_k = tf.constant([[10,0,0],
@@ -707,8 +697,10 @@ if __name__ == '__main__':
     #    b = tf.print(a, [weights, output], "#These are the attention weights")
     #    with tf.control_dependencies([a,b]):
     #        test_out = tf.debugging.assert_type(output, tf.float32)
+        init = tf.global_variables_initializer()
         #out, weights = sess.run(multihead_attention(y,y,y,0,8,1,512))
-        layer, weights = sess.run(multihead_attention(y,y,y,0,8,1,512))
+        sess.run(init)
+
         #stuff = sess.run(print_dk)
         #output, weights = sess.run(attention(temp_q, temp_k, temp_v, None))
 
